@@ -31,6 +31,8 @@ bool g_cheat_boost = false;  // Cheats: always boosting
 extern "C" bool cnk_cheat_crates = false;
 // Cheats: every character, track and kart unlocked while on (src/game/hooks.cpp).
 extern "C" bool cnk_cheat_unlock = false;
+// Cheats: the AI keeps one speed wherever it is, from the next race (src/game/hooks.cpp).
+extern "C" bool cnk_cheat_rubber = false;
 namespace cnk {
 
 // The player's Wumpa count: the game's list of karts ([[[0x4B86AC] + 0x18] + 4]: first entry at +8, the end at
@@ -204,6 +206,17 @@ const Row kRows[] = {
          Changed();
      },
      nullptr},
+    {"Aspect ratio",
+     [] {
+         static const bool at_start = app::Get().aspect_4_3;  // the game reads it once, at start
+         std::string v = app::Get().aspect_4_3 ? "4:3" : "Widescreen";
+         return app::Get().aspect_4_3 != at_start ? v + " (restart)" : v;
+     },
+     [](int) {
+         app::Get().aspect_4_3 = !app::Get().aspect_4_3;
+         Changed();
+     },
+     nullptr},
     {"Texture filtering",
      [] {
          uint32_t a = app::Get().aniso;
@@ -256,6 +269,13 @@ const Row kRows[] = {
          Changed();
      },
      nullptr},
+    {"Cheat: no rubberbanding",
+     [] { return std::string(cnk_cheat_rubber ? "On (next race)" : "Off"); },
+     [](int) {
+         cnk_cheat_rubber = !cnk_cheat_rubber;
+         Changed();
+     },
+     nullptr},
     {"Cheat: best crate items", [] { return std::string(cnk_cheat_crates ? "On" : "Off"); },
      [](int) {
          cnk_cheat_crates = !cnk_cheat_crates;
@@ -270,6 +290,7 @@ const Row kRows[] = {
          g_cheat_boost = false;
          cnk_cheat_crates = false;
          cnk_cheat_unlock = false;
+         cnk_cheat_rubber = false;
          audio::SetOutputMode(0);
          Changed(true);
      }},
@@ -325,7 +346,11 @@ bool MenuMessage(void*, uint32_t msg, uintptr_t wp, intptr_t, intptr_t* result) 
 }
 
 // game thread: Back + Start toggles; while open the pad drives the menu and the game sees nothing pressed
+// Local test input (a file kept out of the repository) can set this to drive the game.
+void (*g_dev_pad)(int port, input::Pad& p) = nullptr;
+
 void MenuPad(int port, input::Pad& p) {
+    if (g_dev_pad) g_dev_pad(port, p);
     if (port != 0) return;
     constexpr uint16_t kUpB = 1, kDownB = 2, kLeftB = 4, kRightB = 8, kStartB = 16, kBackB = 32;
     static uint16_t prev = 0;

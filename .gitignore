@@ -29,3 +29,6 @@ settings.toml
 
 # build logs
 *.log
+
+# local test tools
+/src/common/devinput.cpp

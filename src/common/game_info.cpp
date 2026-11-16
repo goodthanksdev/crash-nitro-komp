@@ -8,7 +8,7 @@ bool MenuMessage(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* 
 void MenuPad(int port, input::Pad& p);
 void MenuUi(double fps);
 }  // namespace cnk
-extern "C" bool cnk_cheat_crates, cnk_cheat_unlock;
+extern "C" bool cnk_cheat_crates, cnk_cheat_unlock, cnk_cheat_rubber;
 
 const app::GameInfo app::kGame = {
     .title = L"Crash Nitro Kart",               // window and splash
@@ -19,7 +19,7 @@ const app::GameInfo app::kGame = {
     .splash = L"splash",                  // optional splash.png or splash.bmp beside the exe
     .missing = L"Put the game in the assets folder: its disc image (.iso), or default.xbe with its folders beside it.",
     .images = {{"default.xbe", "CrashNitroKart"}},  // each recompiled xbe and its exe, for title launches
-    .options = {{"show_fps", &cnk::g_show_fps, nullptr}, {"cheat_wumpa", &cnk::g_cheat_wumpa, nullptr}, {"cheat_boost", &cnk::g_cheat_boost, nullptr}, {"cheat_crates", &cnk_cheat_crates, nullptr}, {"cheat_unlock", &cnk_cheat_unlock, nullptr}},                        // game settings kept in the settings file
+    .options = {{"show_fps", &cnk::g_show_fps, nullptr}, {"cheat_wumpa", &cnk::g_cheat_wumpa, nullptr}, {"cheat_boost", &cnk::g_cheat_boost, nullptr}, {"cheat_crates", &cnk_cheat_crates, nullptr}, {"cheat_unlock", &cnk_cheat_unlock, nullptr}, {"cheat_rubber", &cnk_cheat_rubber, nullptr}},                        // game settings kept in the settings file
     .load = nullptr,                      // reads more from the settings file's toml::table
     .save = nullptr,                      // writes more into it
     .init = nullptr,                      // after the settings load, before the window and boot

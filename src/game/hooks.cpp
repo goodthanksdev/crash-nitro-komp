@@ -56,3 +56,40 @@ X86_FUNC(sub_0006D1A0) {
     }
     __imp__sub_0006D1A0(ctx, base);
 }
+
+// The options menu's "no rubberbanding" cheat.
+extern "C" bool cnk_cheat_rubber;
+
+// The rubberbanding object, kept from its loader below.
+static uint32_t g_rubber;
+
+// 0x5C830 loads dda/rubberbanding.csv into the rubberbanding object (edi) as each race starts. Its four lists (count
+// at +0x1C, at +0x20, +0x24, +0x28, +0x2C) are speed ranges by row; 0x5CB60 copies one row to +0x30 to +0x3C.
+X86_EXTERN_FUNC(__imp__sub_0005C830);
+X86_FUNC(sub_0005C830) {
+    g_rubber = ctx.edi;
+    __imp__sub_0005C830(ctx, base);
+}
+
+// 0x5E820 is the catch-up ("DDA") update: every so often one of its parts sets the AI karts' target speed (kart +
+// 0x1F4) from where they are against the player: slower ahead and faster behind (rubberbanding.csv), close to the
+// player's own speed for "buddy" karts (buddyrubberbanding.csv), and more. With the cheat every AI kart gets the
+// middle of the race's rubberbanding row instead, wherever it is.
+X86_EXTERN_FUNC(__imp__sub_0005E820);
+X86_FUNC(sub_0005E820) {
+    __imp__sub_0005E820(ctx, base);
+    if (!cnk_cheat_rubber || !g_rubber) return;
+    auto get = [](uint32_t va) { uint32_t v = R32(va); float f; std::memcpy(&f, &v, 4); return f; };
+    float speed = (get(g_rubber + 0x30) + get(g_rubber + 0x34) + get(g_rubber + 0x38) + get(g_rubber + 0x3C)) / 4;
+    if (!(speed > 5.0f && speed < 100.0f)) return;
+    uint32_t v;
+    std::memcpy(&v, &speed, 4);
+    auto ok = [](uint32_t p) { return p >= 0x10000 && p < 0x4000000; };
+    uint32_t a = R32(0x4B86AC), b = ok(a) ? R32(a + 0x18) : 0, list = ok(b) ? R32(b + 4) : 0;
+    if (!ok(list)) return;
+    uint32_t end = R32(list + 0x10), node = R32(list + 8);
+    for (int n = 0; n < 64 && ok(node) && node != end; n++, node = R32(node)) {
+        uint32_t kart = R32(node + 8);
+        if (ok(kart) && !(R32(kart + 0x38) & 2)) W32(kart + 0x1F4, v);
+    }
+}
