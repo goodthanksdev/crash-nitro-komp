@@ -8,6 +8,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdio>
+#include <cstring>
 #include <mutex>
 #include <string>
 #include <vector>
@@ -24,15 +25,18 @@ namespace cnk {
 
 bool g_show_fps = false;  // a settings file option, see game_info.cpp
 bool g_cheat_wumpa = false;  // Cheats: Wumpa fruit stays at 10 (juiced weapons)
+bool g_cheat_boost = false;  // Cheats: always boosting
 }  // namespace cnk
 // Cheats: crates roll as if you were last. Read by the crate hook in the game code (src/game/hooks.cpp).
 extern "C" bool cnk_cheat_crates = false;
+// Cheats: every character, track and kart unlocked while on (src/game/hooks.cpp).
+extern "C" bool cnk_cheat_unlock = false;
 namespace cnk {
 
 // The player's Wumpa count: the game's list of karts ([[[0x4B86AC] + 0x18] + 4]: first entry at +8, the end at
 // +0x10; each entry's kart at +8, the next entry at +0) holds the human player's kart with flag 2 at +0x38, and its
 // count at +0xB0. Only written while it reads as a count (0 to 10), and only for pointers inside the console's memory.
-static uint32_t PlayerKart() {
+uint32_t PlayerKart() {  // also used by the boost hook (src/game/hooks.cpp)
     auto ok = [](uint32_t p) { return p >= 0x10000 && p < 0x4000000; };
     uint32_t a = kernel::R32(0x4B86AC);
     if (!ok(a)) return 0;
@@ -48,9 +52,34 @@ static uint32_t PlayerKart() {
     }
     return 0;
 }
+// The boost cheat is in src/game/hooks.cpp: it chains real boosts through the game's AddBoost.
+static void SetFloat(uint32_t va, float f) { uint32_t v; std::memcpy(&v, &f, 4); kernel::W32(va, v); }
+static float GetFloat(uint32_t va) { uint32_t v = kernel::R32(va); float f; std::memcpy(&f, &v, 4); return f; }
+// Unlocks: the unlockables ([[0x4B8734] + 0x38]: gameprogression/unlockables.csv, count at +0x18) keep a bit each in
+// [[unlocks + 0xC] + 4] (the bit count at +8). The cheat sets them all and keeps your own; turning it off puts those
+// back (a save made meanwhile keeps everything unlocked until the next one).
+static void ApplyUnlocks() {
+    static bool kept = false;
+    static uint32_t own[8], words = 0, where = 0;
+    auto ok = [](uint32_t p) { return p >= 0x10000 && p < 0x4000000; };
+    uint32_t g = kernel::R32(0x4B8734), u = ok(g) ? kernel::R32(g + 0x38) : 0, bits = ok(u) ? kernel::R32(u + 0xC) : 0;
+    uint32_t w = ok(bits) ? kernel::R32(bits + 4) : 0, n = ok(bits) ? kernel::R32(bits + 8) : 0;
+    if (!ok(w) || n == 0 || n > 32 * 8) { kept = false; return; }
+    uint32_t nw = (n + 31) / 32;
+    if (cnk_cheat_unlock) {
+        if (!kept || where != w) { for (uint32_t i = 0; i < nw; i++) own[i] = kernel::R32(w + 4 * i); words = nw; where = w; kept = true; }
+        for (uint32_t i = 0; i < nw; i++) kernel::W32(w + 4 * i, i + 1 < nw || n % 32 == 0 ? 0xFFFFFFFFu : (1u << (n % 32)) - 1);
+    } else if (kept) {
+        if (where == w) for (uint32_t i = 0; i < words; i++) kernel::W32(w + 4 * i, own[i]);
+        kept = false;
+    }
+}
 static void ApplyCheats() {
+    ApplyUnlocks();
     if (!g_cheat_wumpa) return;
-    if (uint32_t kart = PlayerKart(); kart && kernel::R32(kart + 0xB0) <= 10) kernel::W32(kart + 0xB0, 10);
+    uint32_t kart = PlayerKart();
+    if (!kart) return;
+    if (g_cheat_wumpa && kernel::R32(kart + 0xB0) <= 10) kernel::W32(kart + 0xB0, 10);
 }
 
 namespace {
@@ -215,6 +244,18 @@ const Row kRows[] = {
          Changed();
      },
      nullptr},
+    {"Cheat: infinite boost", [] { return std::string(g_cheat_boost ? "On" : "Off"); },
+     [](int) {
+         g_cheat_boost = !g_cheat_boost;
+         Changed();
+     },
+     nullptr},
+    {"Cheat: unlock everything", [] { return std::string(cnk_cheat_unlock ? "On" : "Off"); },
+     [](int) {
+         cnk_cheat_unlock = !cnk_cheat_unlock;
+         Changed();
+     },
+     nullptr},
     {"Cheat: best crate items", [] { return std::string(cnk_cheat_crates ? "On" : "Off"); },
      [](int) {
          cnk_cheat_crates = !cnk_cheat_crates;
@@ -226,7 +267,9 @@ const Row kRows[] = {
          app::Get() = app::Settings{};
          g_show_fps = false;
          g_cheat_wumpa = false;
+         g_cheat_boost = false;
          cnk_cheat_crates = false;
+         cnk_cheat_unlock = false;
          audio::SetOutputMode(0);
          Changed(true);
      }},
