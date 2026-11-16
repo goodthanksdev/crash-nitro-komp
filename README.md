@@ -8,7 +8,10 @@ A native PC port of Crash Nitro Kart (Xbox), recompiled with [Xbox XBE Recomp](h
 ## Play
 1. Put your game in `assets`: the disc image (`.iso`), or `default.xbe` with its folders.
 2. Run `CrashNitroKart.exe`. The first start builds the game's code for your PC (once).
-3. **F1** or **Back + Start**: options (display, resolution, frame rate, filtering, audio, FPS).
+3. **F1** or **Back + Start**: options (display, 4:3, frame rate, keyboard controls, cheats).
+
+## Known issues
+- Some 2D (HUD, menus) is stretched in widescreen. 4:3 in F1 shows it unstretched.
 
 ## Build
 Visual Studio 2022 with **Desktop development with C++**, **C++ Clang tools** and **C++ CMake tools**. Clone [the toolkit](https://github.com/goodthanksdev/XboxXBE-Recomp) beside this folder, put the game in `assets`, run `build.bat`.
