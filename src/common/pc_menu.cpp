@@ -24,18 +24,33 @@ namespace cnk {
 
 bool g_show_fps = false;  // a settings file option, see game_info.cpp
 bool g_cheat_wumpa = false;  // Cheats: Wumpa fruit stays at 10 (juiced weapons)
+}  // namespace cnk
+// Cheats: crates roll as if you were last. Read by the crate hook in the game code (src/game/hooks.cpp).
+extern "C" bool cnk_cheat_crates = false;
+namespace cnk {
 
-// Player 1's Wumpa count: the player table at 0x4B86D8 holds each player's kart at +0x28 (20 bytes a player), and the
-// count sits 0xDC0 before the kart. Only written while it reads as a count (0 to 10), so a stale kart after a race
-// is left alone.
+// The player's Wumpa count: the game's list of karts ([[[0x4B86AC] + 0x18] + 4]: first entry at +8, the end at
+// +0x10; each entry's kart at +8, the next entry at +0) holds the human player's kart with flag 2 at +0x38, and its
+// count at +0xB0. Only written while it reads as a count (0 to 10), and only for pointers inside the console's memory.
+static uint32_t PlayerKart() {
+    auto ok = [](uint32_t p) { return p >= 0x10000 && p < 0x4000000; };
+    uint32_t a = kernel::R32(0x4B86AC);
+    if (!ok(a)) return 0;
+    uint32_t b = kernel::R32(a + 0x18);
+    if (!ok(b)) return 0;
+    uint32_t list = kernel::R32(b + 4);
+    if (!ok(list)) return 0;
+    uint32_t end = kernel::R32(list + 0x10);
+    uint32_t node = kernel::R32(list + 8);
+    for (int i = 0; i < 64 && ok(node) && node != end; i++, node = kernel::R32(node)) {
+        uint32_t kart = kernel::R32(node + 8);
+        if (ok(kart) && (kernel::R32(kart + 0x38) & 2)) return kart;
+    }
+    return 0;
+}
 static void ApplyCheats() {
     if (!g_cheat_wumpa) return;
-    uint32_t table = kernel::R32(0x4B86D8);
-    if (table < 0x10000 || table >= 0x4000000) return;
-    uint32_t kart = kernel::R32(table + 0x28);
-    if (kart < 0x10000 + 0xDC0 || kart >= 0x4000000) return;
-    uint32_t count = kart - 0xDC0;
-    if (kernel::R32(count) <= 10) kernel::W32(count, 10);
+    if (uint32_t kart = PlayerKart(); kart && kernel::R32(kart + 0xB0) <= 10) kernel::W32(kart + 0xB0, 10);
 }
 
 namespace {
@@ -200,11 +215,18 @@ const Row kRows[] = {
          Changed();
      },
      nullptr},
+    {"Cheat: best crate items", [] { return std::string(cnk_cheat_crates ? "On" : "Off"); },
+     [](int) {
+         cnk_cheat_crates = !cnk_cheat_crates;
+         Changed();
+     },
+     nullptr},
     {"Reset to defaults", nullptr, nullptr,
      [] {
          app::Get() = app::Settings{};
          g_show_fps = false;
          g_cheat_wumpa = false;
+         cnk_cheat_crates = false;
          audio::SetOutputMode(0);
          Changed(true);
      }},
