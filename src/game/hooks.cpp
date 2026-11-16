@@ -77,6 +77,7 @@ X86_FUNC(sub_0005C830) {
 // middle of the race's rubberbanding row instead, wherever it is.
 X86_EXTERN_FUNC(__imp__sub_0005E820);
 X86_FUNC(sub_0005E820) {
+    uint32_t dda = R32(ctx.esp + 4);  // the catch-up object; +0xC the list of karts its parts set speeds for
     __imp__sub_0005E820(ctx, base);
     if (!cnk_cheat_rubber || !g_rubber) return;
     auto get = [](uint32_t va) { uint32_t v = R32(va); float f; std::memcpy(&f, &v, 4); return f; };
@@ -85,11 +86,13 @@ X86_FUNC(sub_0005E820) {
     uint32_t v;
     std::memcpy(&v, &speed, 4);
     auto ok = [](uint32_t p) { return p >= 0x10000 && p < 0x4000000; };
-    uint32_t a = R32(0x4B86AC), b = ok(a) ? R32(a + 0x18) : 0, list = ok(b) ? R32(b + 4) : 0;
+    uint32_t list = ok(dda) ? R32(dda + 0xC) : 0;
     if (!ok(list)) return;
     uint32_t end = R32(list + 0x10), node = R32(list + 8);
     for (int n = 0; n < 64 && ok(node) && node != end; n++, node = R32(node)) {
         uint32_t kart = R32(node + 8);
-        if (ok(kart) && !(R32(kart + 0x38) & 2)) W32(kart + 0x1F4, v);
+        if (!ok(kart) || (R32(kart + 0x38) & 2)) continue;
+        float now = get(kart + 0x1F4);  // only over a speed: anything else there is not a racing kart's
+        if (now >= 0.0f && now < 100.0f) W32(kart + 0x1F4, v);
     }
 }
