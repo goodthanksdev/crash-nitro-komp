@@ -3,7 +3,7 @@
 
 // the PC options menu (pc_menu.cpp)
 namespace cnk {
-extern bool g_show_fps;
+extern bool g_show_fps, g_cheat_wumpa;
 bool MenuMessage(void* hwnd, uint32_t msg, uintptr_t wp, intptr_t lp, intptr_t* result);
 void MenuPad(int port, input::Pad& p);
 void MenuUi(double fps);
@@ -18,7 +18,7 @@ const app::GameInfo app::kGame = {
     .splash = L"splash",                  // optional splash.png or splash.bmp beside the exe
     .missing = L"Put the game in the assets folder: its disc image (.iso), or default.xbe with its folders beside it.",
     .images = {{"default.xbe", "CrashNitroKart"}},  // each recompiled xbe and its exe, for title launches
-    .options = {{"show_fps", &cnk::g_show_fps, nullptr}},                        // game settings kept in the settings file
+    .options = {{"show_fps", &cnk::g_show_fps, nullptr}, {"cheat_wumpa", &cnk::g_cheat_wumpa, nullptr}},                        // game settings kept in the settings file
     .load = nullptr,                      // reads more from the settings file's toml::table
     .save = nullptr,                      // writes more into it
     .init = nullptr,                      // after the settings load, before the window and boot

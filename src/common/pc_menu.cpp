@@ -18,10 +18,25 @@
 #include "audio/audio.h"
 #include "core/input.h"
 #include "core/log.h"
+#include "kernel/kernel.h"
 
 namespace cnk {
 
 bool g_show_fps = false;  // a settings file option, see game_info.cpp
+bool g_cheat_wumpa = false;  // Cheats: Wumpa fruit stays at 10 (juiced weapons)
+
+// Player 1's Wumpa count: the player table at 0x4B86D8 holds each player's kart at +0x28 (20 bytes a player), and the
+// count sits 0xDC0 before the kart. Only written while it reads as a count (0 to 10), so a stale kart after a race
+// is left alone.
+static void ApplyCheats() {
+    if (!g_cheat_wumpa) return;
+    uint32_t table = kernel::R32(0x4B86D8);
+    if (table < 0x10000 || table >= 0x4000000) return;
+    uint32_t kart = kernel::R32(table + 0x28);
+    if (kart < 0x10000 + 0xDC0 || kart >= 0x4000000) return;
+    uint32_t count = kart - 0xDC0;
+    if (kernel::R32(count) <= 10) kernel::W32(count, 10);
+}
 
 namespace {
 
@@ -179,10 +194,17 @@ const Row kRows[] = {
          Changed();
      },
      nullptr},
+    {"Cheat: infinite Wumpa", [] { return std::string(g_cheat_wumpa ? "On" : "Off"); },
+     [](int) {
+         g_cheat_wumpa = !g_cheat_wumpa;
+         Changed();
+     },
+     nullptr},
     {"Reset to defaults", nullptr, nullptr,
      [] {
          app::Get() = app::Settings{};
          g_show_fps = false;
+         g_cheat_wumpa = false;
          audio::SetOutputMode(0);
          Changed(true);
      }},
@@ -284,6 +306,7 @@ void MenuUi(double fps) {
         cmds.swap(g_cmds);
     }
     for (Cmd c : cmds) Run(c);
+    ApplyCheats();
 
     ImGuiIO& io = ImGui::GetIO();
     float scale = std::max(1.0f, io.DisplaySize.y / 720.0f);
