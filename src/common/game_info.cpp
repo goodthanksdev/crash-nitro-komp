@@ -29,4 +29,19 @@ const app::GameInfo app::kGame = {
     .ui = cnk::MenuUi,                        // ImGui drawing each frame
     .pad = cnk::MenuPad,                  // changes a polled pad (the options menu takes it while open)
     .rumble = nullptr,                    // changes a rumble before it is set
+    // keyboard play, rebound in the options menu; the controller layout is the game's layout A
+    .keys = {{"left", "Steer left", "Left, A"},
+             {"right", "Steer right", "Right, D"},
+             {"up", "Menu up", "Up"},
+             {"down", "Menu down", "Down"},
+             {"a", "Gas / accept", "W, Enter"},
+             {"x", "Brake / reverse", "S"},
+             {"rt", "Hop", "Space"},
+             {"lt", "Boost", "Left Shift"},
+             {"b", "Power-up / back", "E, Backspace"},
+             {"black", "Rear view", "Q"},
+             {"white", "Team frenzy", "F"},
+             {"y", "Toggle HUD", "H"},
+             {"back", "Change view", "C"},
+             {"start", "Pause", "Esc"}},
 };

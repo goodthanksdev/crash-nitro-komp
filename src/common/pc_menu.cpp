@@ -18,6 +18,7 @@
 #include "app/app.h"
 #include "audio/audio.h"
 #include "core/input.h"
+#include "core/keys.h"
 #include "core/log.h"
 #include "kernel/kernel.h"
 
@@ -86,9 +87,11 @@ static void ApplyCheats() {
 
 namespace {
 
-enum Cmd { kUp, kDown, kLeft, kRight, kAccept, kBack, kToggle };
+enum Cmd { kUp, kDown, kLeft, kRight, kAccept, kBack, kToggle, kClear };
 
 std::atomic<bool> g_open{false};
+bool g_keys_page = false;  // the keyboard controls page
+int g_key_sel = 0, g_key_slot = 0;
 std::mutex g_cmd_lock;
 std::vector<Cmd> g_cmds;
 const auto g_start = std::chrono::steady_clock::now();
@@ -282,6 +285,7 @@ const Row kRows[] = {
          Changed();
      },
      nullptr},
+    {"Keyboard controls", nullptr, nullptr, [] { g_keys_page = true; g_key_sel = 0; g_key_slot = 0; }},
     {"Reset to defaults", nullptr, nullptr,
      [] {
          app::Get() = app::Settings{};
@@ -299,7 +303,30 @@ const Row kRows[] = {
 constexpr int kRowCount = int(sizeof kRows / sizeof kRows[0]);
 int g_sel = 0;
 
+// the keyboard controls page: a row per control with its two keys, then Reset and Back
+void RunKeys(Cmd c) {
+    int n = input::KeyControls(), rows = n + 2;
+    if (input::Capturing()) return;
+    switch (c) {
+        case kToggle: g_open = false; break;
+        case kBack: g_keys_page = false; break;
+        case kUp: g_key_sel = (g_key_sel + rows - 1) % rows; break;
+        case kDown: g_key_sel = (g_key_sel + 1) % rows; break;
+        case kLeft:
+        case kRight: g_key_slot = (g_key_slot + 1) % input::kKeySlots; break;
+        case kClear:
+            if (g_key_sel < n) input::SetKey(g_key_sel, g_key_slot, 0), Changed();
+            break;
+        case kAccept:
+            if (g_key_sel < n) input::CaptureKey(g_key_sel, g_key_slot);
+            else if (g_key_sel == n) input::ResetKeys(), Changed();
+            else g_keys_page = false;
+            break;
+    }
+}
+
 void Run(Cmd c) {
+    if (g_keys_page && g_open) return RunKeys(c);
     const Row& r = kRows[g_sel];
     switch (c) {
         case kToggle: g_open = !g_open; break;
@@ -336,6 +363,7 @@ bool MenuMessage(void*, uint32_t msg, uintptr_t wp, intptr_t, intptr_t* result) 
             case VK_SPACE: Push(kAccept); break;
             case VK_ESCAPE:
             case VK_BACK: Push(kBack); break;
+            case VK_DELETE: Push(kClear); break;
             default: return false;
         }
     } else {
@@ -352,6 +380,7 @@ void (*g_dev_pad)(int port, input::Pad& p) = nullptr;
 void MenuPad(int port, input::Pad& p) {
     if (g_dev_pad) g_dev_pad(port, p);
     if (port != 0) return;
+    input::SetKeysOff(g_open);  // while open the keys drive the menu through window messages, not the game
     constexpr uint16_t kUpB = 1, kDownB = 2, kLeftB = 4, kRightB = 8, kStartB = 16, kBackB = 32;
     static uint16_t prev = 0;
     static bool a_prev = false, b_prev = false;
@@ -362,7 +391,8 @@ void MenuPad(int port, input::Pad& p) {
     if (p.ly < -16000) b |= kDownB;
     if (p.lx < -16000) b |= kLeftB;
     if (p.lx > 16000) b |= kRightB;
-    bool a = p.analog[0] > 0x80, bb = p.analog[1] > 0x80;
+    bool a = p.analog[0] > 0x80, bb = p.analog[1] > 0x80, x = p.analog[2] > 0x80;
+    static bool x_prev = false;
     uint16_t pressed = b & ~prev;
     if ((b & (kStartB | kBackB)) == (kStartB | kBackB) && (pressed & (kStartB | kBackB))) Push(kToggle);
     else if (g_open) {
@@ -377,7 +407,9 @@ void MenuPad(int port, input::Pad& p) {
         if (fire & kRightB) Push(kRight);
         if (a && !a_prev) Push(kAccept);
         if (bb && !b_prev) Push(kBack);
+        if (x && !x_prev) Push(kClear);
     }
+    x_prev = x;
     prev = b;
     a_prev = a;
     b_prev = bb;
@@ -386,6 +418,53 @@ void MenuPad(int port, input::Pad& p) {
         p = input::Pad{};
         p.connected = connected;
     }
+}
+
+// the keyboard controls page, inside the options window
+static void KeysUi(float w, float scale) {
+    ImGuiIO& io = ImGui::GetIO();
+    ImGui::SetWindowFontScale(scale * 1.15f);
+    ImGui::TextColored({1.0f, 0.75f, 0.2f, 1}, "KEYBOARD");
+    ImGui::SetWindowFontScale(scale);
+    ImGui::Separator();
+    ImGui::Dummy({0, 6 * scale});
+    int n = input::KeyControls();
+    float pad = ImGui::GetTextLineHeight() * 0.25f, line = ImGui::GetTextLineHeight() * 1.5f;
+    float right = w - ImGui::GetStyle().WindowPadding.x - 8 * scale, col = 150 * scale;
+    bool capturing = input::Capturing();
+    for (int i = 0; i < n + 2; i++) {
+        ImGui::PushID(i);
+        if (i == n) ImGui::Dummy({0, 8 * scale});
+        bool sel = i == g_key_sel;
+        float y = ImGui::GetCursorPosY();
+        if (ImGui::Selectable("##row", sel, ImGuiSelectableFlags_AllowOverlap, {0, line}) && !capturing) {
+            g_key_sel = i;
+            if (i < n) {  // a click on a key's column picks that slot
+                float mx = ImGui::GetMousePos().x - ImGui::GetWindowPos().x;
+                g_key_slot = mx > right - col ? 1 : 0;
+            }
+            RunKeys(kAccept);
+        }
+        if (!capturing && ImGui::IsItemHovered() && io.MouseDelta.x * io.MouseDelta.x + io.MouseDelta.y * io.MouseDelta.y > 0)
+            g_key_sel = i;
+        ImGui::SetCursorPos({ImGui::GetStyle().WindowPadding.x + 8 * scale, y + pad});
+        const char* name = i < n ? input::KeyLabel(i) : i == n ? "Reset keys" : "Back";
+        ImGui::TextColored(sel ? ImVec4{1, 1, 1, 1} : ImVec4{0.75f, 0.78f, 0.82f, 1}, "%s", name);
+        for (int s = 0; i < n && s < input::kKeySlots; s++) {
+            bool here = sel && s == g_key_slot;
+            std::string v = here && capturing ? "press a key" : input::KeyName(input::Key(i, s));
+            if (v.empty()) v = "-";
+            if (here && !capturing) v = "[ " + v + " ]";
+            float tw = ImGui::CalcTextSize(v.c_str()).x;
+            ImGui::SetCursorPos({right - (input::kKeySlots - 1 - s) * col - tw, y + pad});
+            ImGui::TextColored(here ? ImVec4{1.0f, 0.8f, 0.3f, 1} : ImVec4{0.95f, 0.95f, 0.95f, 1}, "%s", v.c_str());
+        }
+        ImGui::SetCursorPosY(y + line + ImGui::GetStyle().ItemSpacing.y);
+        ImGui::PopID();
+    }
+    ImGui::Dummy({0, 4 * scale});
+    ImGui::Separator();
+    ImGui::TextDisabled(capturing ? "Esc cancel" : "Enter bind   Left/Right slot   Delete / X clear   Esc back");
 }
 
 // render thread, inside the ImGui frame
@@ -432,6 +511,12 @@ void MenuUi(double fps) {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 10 * scale);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, {22 * scale, 18 * scale});
     ImGui::Begin("##options", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoNav | ImGuiWindowFlags_NoSavedSettings);
+    if (g_keys_page) {
+        KeysUi(w, scale);
+        ImGui::End();
+        ImGui::PopStyleVar(2);
+        return;
+    }
     ImGui::SetWindowFontScale(scale * 1.15f);
     ImGui::TextColored({1.0f, 0.75f, 0.2f, 1}, "OPTIONS");
     ImGui::SetWindowFontScale(scale);
