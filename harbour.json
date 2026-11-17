@@ -1,0 +1,11 @@
+{
+  "name": "Crash Nitro Kart",
+  "project": "Crash Nitro Komp",
+  "console": "xbox",
+  "consoleName": "Xbox",
+  "tier": "beta",
+  "needs": "Crash Nitro Kart (Xbox) disc image",
+  "year": 2003,
+  "romDir": "assets",
+  "exe": "CrashNitroKart.exe"
+}
