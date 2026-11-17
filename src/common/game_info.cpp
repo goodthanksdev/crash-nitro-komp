@@ -43,7 +43,7 @@ const app::GameInfo app::kGame = {
              {"y", "Toggle HUD", "H"},
              {"back", "Change view", "C"},
              {"start", "Pause", "Esc"}},
-    .version = "0.1.3",  // the options menu header
+    .version = "0.1.4",  // the options menu header
     .tier = "beta",      // alpha, beta or complete
     .menu = {{"Cheats", "Infinite Wumpa", "Wumpa fruit stays at 10: juiced power-ups.", &cnk::g_cheat_wumpa, nullptr},
              {"Cheats", "Infinite boost", "Always boosting.", &cnk::g_cheat_boost, nullptr},
